@@ -6,7 +6,7 @@ import { cleanOwnerName } from '../utils/nameUtils';
 
 // Define pipelines and their stage orders
 const PIPELINE_STAGES: Record<string, string[]> = {
-  'Portugal': [
+  'PORTUGAL': [
     'PHASE #1/Automation',
     'To Contact',
     'Follow-up',
@@ -58,12 +58,6 @@ const PIPELINE_STAGES: Record<string, string[]> = {
     'Reengage',
     'Proposal Accepted',
   ],
-  'International Living & GCW LEADS': [
-    'IL Ireland 2025',
-    'To Contact',
-    'In Contact',
-    'Follow Up',
-  ],
   'LATAM': [
     'To Contact',
     'Follow Up',
@@ -103,6 +97,8 @@ export default function Tab1Pipeline() {
   const [selectedPipeline, setSelectedPipeline] = useState<string>('');
   const [startDate, setStartDate] = useState<string>('');
   const [endDate, setEndDate] = useState<string>('');
+  const [selectedOwners, setSelectedOwners] = useState<string[]>([]);
+  const [showOwnerDropdown, setShowOwnerDropdown] = useState(false);
 
   useEffect(() => {
     loadData();
@@ -151,6 +147,29 @@ export default function Tab1Pipeline() {
     }
   }, [availablePipelines, selectedPipeline]);
 
+  // Get available owners for multiselect
+  const availableOwners = useMemo(() => {
+    const ownersSet = new Set<string>();
+    ALLOWED_OWNER_IDS.forEach(id => {
+      const name = ownerNames.get(id);
+      if (name) {
+        ownersSet.add(name);
+      }
+    });
+    return Array.from(ownersSet).sort();
+  }, [ownerNames]);
+
+  // Handle owner selection toggle
+  const toggleOwner = (ownerName: string) => {
+    setSelectedOwners(prev => {
+      if (prev.includes(ownerName)) {
+        return prev.filter(o => o !== ownerName);
+      } else {
+        return [...prev, ownerName];
+      }
+    });
+  };
+
   // Filter deals based on selections
   const filteredDeals = useMemo(() => {
     if (!selectedPipeline) return [];
@@ -166,6 +185,12 @@ export default function Tab1Pipeline() {
       const ownerId = deal['Owner ID'];
       if (!ALLOWED_OWNER_IDS.includes(ownerId)) return false;
 
+      // Filter by selected owners (if any selected)
+      if (selectedOwners.length > 0) {
+        const ownerName = ownerNames.get(ownerId);
+        if (!ownerName || !selectedOwners.includes(ownerName)) return false;
+      }
+
       // Exclude "Unknown" stage
       if (!deal.Stage || deal.Stage === 'Unknown') return false;
 
@@ -180,7 +205,7 @@ export default function Tab1Pipeline() {
 
       return true;
     });
-  }, [deals, selectedPipeline, startDate, endDate]);
+  }, [deals, selectedPipeline, startDate, endDate, selectedOwners, ownerNames]);
 
   // Calculate metrics grouped by Owner ID
   const metrics = useMemo((): PipelineMetrics[] => {
@@ -273,7 +298,7 @@ export default function Tab1Pipeline() {
     <div className="space-y-6">
       {/* Filters */}
       <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-200">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
           {/* Pipeline Dropdown */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -290,6 +315,37 @@ export default function Tab1Pipeline() {
                 </option>
               ))}
             </select>
+          </div>
+
+          {/* Deal Owners Multi-select */}
+          <div className="relative">
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Deal Owners
+            </label>
+            <button
+              onClick={() => setShowOwnerDropdown(!showOwnerDropdown)}
+              className="w-full px-4 py-2.5 border border-gray-300 rounded-lg text-left text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            >
+              {selectedOwners.length === 0 ? 'All Owners' : `${selectedOwners.length} selected`}
+            </button>
+            {showOwnerDropdown && (
+              <div className="absolute z-20 mt-1 w-full bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                {availableOwners.map(owner => (
+                  <label
+                    key={owner}
+                    className="flex items-center px-4 py-2 hover:bg-gray-50 cursor-pointer"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={selectedOwners.includes(owner)}
+                      onChange={() => toggleOwner(owner)}
+                      className="mr-3 h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                    />
+                    <span className="text-sm text-gray-900">{owner}</span>
+                  </label>
+                ))}
+              </div>
+            )}
           </div>
 
           {/* Start Date */}
@@ -321,6 +377,7 @@ export default function Tab1Pipeline() {
 
         <p className="text-sm text-gray-500 mt-4">
           Showing {filteredDeals.length} deals in pipeline "{selectedPipeline}"
+          {selectedOwners.length > 0 && ` for ${selectedOwners.length} owner(s)`}
         </p>
       </div>
 
