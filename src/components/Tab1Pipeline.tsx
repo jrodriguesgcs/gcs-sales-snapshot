@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { Deal, PipelineMetrics } from '../types/deals';
 import { loadDealsCSV } from '../services/csvParser';
 import { parseCSVDate, isDateInRange } from '../utils/dateUtils';
-import { cleanOwnerName, shouldExcludeOwner } from '../utils/nameUtils';
+import { cleanOwnerName } from '../utils/nameUtils';
 
 // Define pipelines and their stage orders
 const PIPELINE_STAGES: Record<string, string[]> = {
