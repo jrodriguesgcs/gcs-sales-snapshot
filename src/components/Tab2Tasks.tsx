@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { TaskMetrics, LoadingProgress as LoadingProgressType } from '../types/tasks';
 import { fetchDealsAndTasks, Deal, DealTask } from '../services/dealsApi';
 import { fetchUsers } from '../services/tasksApi';
-import { isTaskOverdue } from '../utils/dateUtils';
+import { isTaskOverdue, isTaskFutureDueDate } from '../utils/dateUtils';
 import { cleanOwnerName } from '../utils/nameUtils';
 import LoadingProgress from './LoadingProgress';
 
@@ -70,7 +70,8 @@ export default function Tab2Tasks() {
           total: 0,
           completed: 0,
           overdue: 0,
-          incompleteNoDueDate: 0,
+          openFutureDueDate: 0,
+          openNoDueDate: 0,
         });
       }
 
@@ -87,11 +88,13 @@ export default function Tab2Tasks() {
         if (isCompleted) {
           metric.completed++;
         } else {
-          // Incomplete
+          // Incomplete task - categorize by due date status
           if (!task.duedate) {
-            metric.incompleteNoDueDate++;
+            metric.openNoDueDate++;
           } else if (isTaskOverdue(task)) {
             metric.overdue++;
+          } else if (isTaskFutureDueDate(task)) {
+            metric.openFutureDueDate++;
           }
         }
       });
@@ -151,7 +154,8 @@ export default function Tab2Tasks() {
                 <th className="px-6 py-3 text-right text-sm font-semibold text-gray-700">Total Tasks</th>
                 <th className="px-6 py-3 text-right text-sm font-semibold text-gray-700">Completed</th>
                 <th className="px-6 py-3 text-right text-sm font-semibold text-gray-700">Overdue</th>
-                <th className="px-6 py-3 text-right text-sm font-semibold text-gray-700">Incomplete (No Due Date)</th>
+                <th className="px-6 py-3 text-right text-sm font-semibold text-gray-700">Open (Future Due Date)</th>
+                <th className="px-6 py-3 text-right text-sm font-semibold text-gray-700">Open (No Due Date)</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200">
@@ -169,15 +173,18 @@ export default function Tab2Tasks() {
                   <td className="px-6 py-4 text-right text-sm font-semibold text-red-600">
                     {metric.overdue}
                   </td>
+                  <td className="px-6 py-4 text-right text-sm font-semibold text-blue-600">
+                    {metric.openFutureDueDate}
+                  </td>
                   <td className="px-6 py-4 text-right text-sm font-semibold text-yellow-600">
-                    {metric.incompleteNoDueDate}
+                    {metric.openNoDueDate}
                   </td>
                 </tr>
               ))}
 
               {metrics.length === 0 && !isLoading && (
                 <tr>
-                  <td colSpan={5} className="px-6 py-8 text-center text-gray-500">
+                  <td colSpan={6} className="px-6 py-8 text-center text-gray-500">
                     No tasks found
                   </td>
                 </tr>

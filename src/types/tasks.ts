@@ -20,11 +20,12 @@ export interface TaskMetrics {
   total: number;
   completed: number;
   overdue: number;
-  incompleteNoDueDate: number;
+  openFutureDueDate: number;
+  openNoDueDate: number;
 }
 
 export interface LoadingProgress {
-  phase: 'idle' | 'users' | 'tasks' | 'processing' | 'complete';
+  phase: 'idle' | 'users' | 'deals' | 'tasks' | 'processing' | 'complete';
   message: string;
   current: number;
   total: number;

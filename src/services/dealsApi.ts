@@ -88,69 +88,77 @@ export async function fetchDealsAndTasks(
   const allDeals: Deal[] = [];
   const allTasks: DealTask[] = [];
 
-  // Step 1: Load all deals for each owner (sequentially to avoid progress jumping)
+  // Step 1: Load all deals for all owners in parallel
   onProgress({
-    phase: 'users',
+    phase: 'deals',
     message: 'Loading deals for all owners...',
     current: 0,
     total: OWNER_IDS.length,
     percentage: 0,
   });
 
-  for (let index = 0; index < OWNER_IDS.length; index++) {
-    const ownerId = OWNER_IDS[index];
-    const ownerDeals: Deal[] = [];
-    let offset = 0;
-    const limit = 100;
-    let hasMore = true;
+  let completedOwners = 0;
 
-    while (hasMore) {
-      try {
-        const endpoint = `/api/3/deals?filters[owner]=${ownerId}&limit=${limit}&offset=${offset}`;
-        const data = await rateLimiter.throttle(() => fetchFromAPI(endpoint));
+  const dealsByOwner = await Promise.all(
+    OWNER_IDS.map(async (ownerId) => {
+      const ownerDeals: Deal[] = [];
+      let offset = 0;
+      const limit = 100;
+      let hasMore = true;
 
-        if (data.deals && data.deals.length > 0) {
-          ownerDeals.push(...data.deals);
-          offset += limit;
-          hasMore = data.deals.length === limit;
-        } else {
+      while (hasMore) {
+        try {
+          const endpoint = `/api/3/deals?filters[owner]=${ownerId}&limit=${limit}&offset=${offset}`;
+          const data = await rateLimiter.throttle(() => fetchFromAPI(endpoint));
+
+          if (data.deals && data.deals.length > 0) {
+            ownerDeals.push(...data.deals);
+            offset += limit;
+            hasMore = data.deals.length === limit;
+          } else {
+            hasMore = false;
+          }
+        } catch (error) {
+          console.error(`Error loading deals for owner ${ownerId}:`, error);
           hasMore = false;
         }
-      } catch (error) {
-        console.error(`Error loading deals for owner ${ownerId}:`, error);
-        hasMore = false;
       }
-    }
 
-    allDeals.push(...ownerDeals);
+      // Update progress after completing each owner
+      completedOwners++;
+      onProgress({
+        phase: 'deals',
+        message: `Loading deals: ${completedOwners}/${OWNER_IDS.length} owners completed`,
+        current: completedOwners,
+        total: OWNER_IDS.length,
+        percentage: (completedOwners / OWNER_IDS.length) * 30,
+      });
 
-    onProgress({
-      phase: 'users',
-      message: `Loaded deals for owner ${index + 1}/${OWNER_IDS.length} (${ownerDeals.length} deals, ${allDeals.length} total)`,
-      current: index + 1,
-      total: OWNER_IDS.length,
-      percentage: ((index + 1) / OWNER_IDS.length) * 50,
-    });
-  }
+      return ownerDeals;
+    })
+  );
+
+  dealsByOwner.forEach(deals => allDeals.push(...deals));
 
   console.log(`✅ Total deals loaded: ${allDeals.length}`);
 
-  // Step 2: Load tasks for all deals with thread-safe progress tracking
+  // Step 2: Load tasks for all deals in parallel with proper progress tracking
   onProgress({
     phase: 'tasks',
     message: 'Loading tasks for all deals...',
     current: 0,
     total: allDeals.length,
-    percentage: 50,
+    percentage: 30,
   });
 
   let processedDeals = 0;
+  const totalDeals = allDeals.length;
 
   // Process deals in batches using 20 workers
-  const batchSize = Math.ceil(allDeals.length / 20);
+  const batchSize = Math.ceil(totalDeals / 20);
   const workers = Array.from({ length: 20 }, async (_, workerIndex) => {
     const startIndex = workerIndex * batchSize;
-    const endIndex = Math.min(startIndex + batchSize, allDeals.length);
+    const endIndex = Math.min(startIndex + batchSize, totalDeals);
     const workerTasks: DealTask[] = [];
 
     for (let i = startIndex; i < endIndex; i++) {
@@ -171,18 +179,18 @@ export async function fetchDealsAndTasks(
           workerTasks.push(...tasks);
         }
 
-        // Thread-safe progress update
+        // Increment processed counter
         processedDeals++;
         const current = processedDeals;
 
-        // Only update progress every 10 deals to reduce UI updates
-        if (current % 10 === 0 || current === allDeals.length) {
+        // Update progress every 100 deals or at completion
+        if (current % 100 === 0 || current === totalDeals) {
           onProgress({
             phase: 'tasks',
-            message: `Loading tasks: ${current}/${allDeals.length} deals processed`,
+            message: `Loading tasks: ${current}/${totalDeals} deals processed`,
             current: current,
-            total: allDeals.length,
-            percentage: 50 + (current / allDeals.length) * 50,
+            total: totalDeals,
+            percentage: 30 + (current / totalDeals) * 70,
           });
         }
       } catch (error) {
