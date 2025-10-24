@@ -145,7 +145,6 @@ export async function fetchDealsAndTasks(
   });
 
   let processedDeals = 0;
-  const progressLock = { value: 0 };
 
   // Process deals in batches using 20 workers
   const batchSize = Math.ceil(allDeals.length / 20);
