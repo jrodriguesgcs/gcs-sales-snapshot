@@ -1,5 +1,4 @@
 import { useState, useEffect } from 'react';
-import { TaskMetrics } from '../types/tasks';
 import { fetchTaskMetrics, MetricsResponse } from '../services/metricsApi';
 
 export default function Tab2Tasks() {
