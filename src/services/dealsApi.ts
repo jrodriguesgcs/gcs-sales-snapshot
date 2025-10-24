@@ -173,7 +173,6 @@ export async function fetchDealsAndTasks(
         }
 
         // Update progress
-        const currentTotal = allTasks.length + workerTasks.length;
         onProgress({
           phase: 'tasks',
           message: `Loading tasks: ${i + 1}/${allDeals.length} deals processed`,
