@@ -52,13 +52,20 @@ const rateLimiter = new RateLimiter();
 async function fetchFromAPI(endpoint: string): Promise<any> {
   const url = `/api/ac-proxy?endpoint=${encodeURIComponent(endpoint)}`;
   
+  console.log('🌐 Fetching from proxy:', url);
+  
   const response = await fetch(url);
 
   if (!response.ok) {
+    const errorText = await response.text();
+    console.error('❌ API Error:', response.status, errorText);
     throw new Error(`API Error: ${response.status} ${response.statusText}`);
   }
 
-  return response.json();
+  const data = await response.json();
+  console.log('✅ API Response received:', Object.keys(data));
+  
+  return data;
 }
 
 export async function fetchUsers(
@@ -85,10 +92,22 @@ export async function fetchUsers(
 
     if (data.users && data.users.length > 0) {
       data.users.forEach((user: User) => {
-        const fullName = `${user.firstName} ${user.lastName}`.trim();
-        // Extract only first part before " | "
-        const cleanName = fullName.split('|')[0].trim();
-        userMap.set(user.id, cleanName || `User ${user.id}`);
+        // Build full name
+        const fullName = `${user.firstName || ''} ${user.lastName || ''}`.trim();
+        
+        // Extract only first part before " | " if it exists
+        let cleanName = fullName;
+        if (fullName.includes('|')) {
+          cleanName = fullName.split('|')[0].trim();
+        }
+        
+        // Fallback to email or ID if no name
+        if (!cleanName) {
+          cleanName = user.email || `User ${user.id}`;
+        }
+        
+        console.log(`User ${user.id}: "${fullName}" -> "${cleanName}"`);
+        userMap.set(user.id, cleanName);
       });
       
       totalLoaded += data.users.length;
@@ -106,6 +125,8 @@ export async function fetchUsers(
       hasMore = false;
     }
   }
+
+  console.log('📊 Total users loaded:', userMap.size);
 
   onProgress({
     phase: 'users',

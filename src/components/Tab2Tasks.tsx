@@ -37,11 +37,21 @@ export default function Tab2Tasks() {
 
     try {
       // Load users first
+      console.log('🔵 Starting to load users...');
       const users = await fetchUsers(setLoadingProgress);
+      console.log('✅ Users loaded:', users.size, 'users');
+      console.log('👥 User map sample:', Array.from(users.entries()).slice(0, 3));
       setUserMap(users);
 
+      if (users.size === 0) {
+        throw new Error('No users loaded from API. Check API credentials.');
+      }
+
       // Load first 1000 tasks
+      console.log('🔵 Starting to load tasks...');
       const initialTasks = await fetchTasks(dateFilter, setLoadingProgress, 1000);
+      console.log('✅ Tasks loaded:', initialTasks.length);
+      console.log('📋 First task sample:', initialTasks[0]);
       setTasks(initialTasks);
 
       if (initialTasks.length < 1000) {
@@ -58,6 +68,7 @@ export default function Tab2Tasks() {
         startBackgroundLoading();
       }
     } catch (err) {
+      console.error('❌ Error loading data:', err);
       const errorMessage = err instanceof Error ? err.message : 'Failed to load tasks';
       setError(errorMessage);
     } finally {
