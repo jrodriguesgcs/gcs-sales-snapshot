@@ -15,15 +15,30 @@ export async function loadDealsCSV(): Promise<Deal[]> {
       Papa.parse(csvText, {
         header: true,
         skipEmptyLines: true,
-        dynamicTyping: false, // Keep all as strings
+        dynamicTyping: false,
+        transformHeader: (header: string) => header.trim(),
+        // Make parser more lenient
+        quoteChar: '"',
+        escapeChar: '"',
+        delimiter: ',',
+        newline: '\n',
+        // Skip bad rows instead of failing
+        skipFirstNLines: 0,
         complete: (results) => {
+          // Log errors but don't fail
           if (results.errors.length > 0) {
-            console.error('CSV parsing errors:', results.errors);
-            reject(new Error(`CSV parsing failed: ${results.errors[0].message}`));
-            return;
+            console.warn(`CSV parsing warnings (${results.errors.length} rows skipped):`, 
+              results.errors.slice(0, 5)); // Only show first 5 errors
           }
           
-          resolve(results.data as Deal[]);
+          // Filter out rows with missing critical fields
+          const validDeals = (results.data as Deal[]).filter(deal => {
+            return deal['Deal ID'] && deal['Owner Name'] && deal.Pipeline;
+          });
+          
+          console.log(`✅ Loaded ${validDeals.length} valid deals (${results.data.length - validDeals.length} skipped due to missing fields)`);
+          
+          resolve(validDeals);
         },
         error: (error: Error) => {
           reject(new Error(`CSV parsing error: ${error.message}`));

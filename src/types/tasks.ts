@@ -3,7 +3,7 @@ export interface Task {
   title: string;
   status: number; // 0 = incomplete, 1 = complete
   duedate: string | null;
-  assignee_userid: string;
+  assignee: string; // ✅ Changed from assignee_userid
   cdate: string;
 }
 

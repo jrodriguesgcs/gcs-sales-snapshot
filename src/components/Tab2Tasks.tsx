@@ -128,11 +128,9 @@ export default function Tab2Tasks() {
   // Calculate metrics
   const metrics: TaskMetrics[] = (() => {
     const metricsMap = new Map<string, TaskMetrics>();
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
 
     tasks.forEach(task => {
-      const userId = task.assignee_userid;
+      const userId = task.assignee; // ✅ Changed from assignee_userid
       const userName = userMap.get(userId) || `User ${userId}`;
 
       // Exclude operator (ID 16)
