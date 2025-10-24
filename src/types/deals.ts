@@ -3,6 +3,7 @@ export interface Deal {
   'Title': string;
   'Status': string;
   'Owner Name': string;
+  'Owner ID': string;
   'Pipeline': string;
   'Stage': string;
   'DISTRIBUTION Time': string;

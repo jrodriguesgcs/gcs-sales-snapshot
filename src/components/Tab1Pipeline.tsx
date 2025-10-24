@@ -4,8 +4,100 @@ import { loadDealsCSV } from '../services/csvParser';
 import { parseCSVDate, isDateInRange } from '../utils/dateUtils';
 import { cleanOwnerName, shouldExcludeOwner } from '../utils/nameUtils';
 
+// Define pipelines and their stage orders
+const PIPELINE_STAGES: Record<string, string[]> = {
+  'Portugal': [
+    'PHASE #1/Automation',
+    'To Contact',
+    'Follow-up',
+    'Calendly Booked',
+    'Pending Naturalization Updates',
+    'Proposal Sent',
+    'Reengage',
+    'Proposal Accepted',
+  ],
+  'Caribbean & Vanuatu': [
+    'Reengage | Oct 2025 - Rohan Harris',
+    'PHASE #1 / Automation',
+    'To Contact',
+    'Follow-up',
+    'Calendly Booked',
+    'Cost Calculation / Automation',
+    'DD Stage',
+    'Proposal Sent',
+    'Sent to Partner',
+    'Reengage',
+    'Proposal Accepted',
+  ],
+  'CBI and RBI': [
+    'To Contact',
+    'In Contact',
+    'Follow-up',
+    'Calendly Booked',
+    'Proposal Sent',
+    'Proposa Accepted',
+  ],
+  'Eastern Europe & Middle East': [
+    'In Contact',
+    'To Contact',
+    'Old Leads to Qualify',
+    'Follow Up',
+    'Calendly Booked',
+    'Proposal Sent',
+    'Reengage',
+    'Proposal Accepted',
+  ],
+  'Canada': [
+    'PHASE #1/Automation',
+    'To Contact',
+    'In Contact',
+    'Follow-up',
+    'Calendly Booked',
+    'Sent to Partner',
+    'Proposal Sent',
+    'Reengage',
+    'Proposal Accepted',
+  ],
+  'International Living & GCW LEADS': [
+    'IL Ireland 2025',
+    'To Contact',
+    'In Contact',
+    'Follow Up',
+  ],
+  'LATAM': [
+    'To Contact',
+    'Follow Up',
+    'Calendly Booked',
+    'Reengage',
+    'Proposal Sent',
+    'Proposal Accepted',
+  ],
+  'Russian Leads': [
+    'TEMP: Pre-Distribution',
+    'To Contact',
+    'Follow Up',
+    'Calendly Booked',
+    'Reengage',
+    'Proposal Sent',
+    'Proposal Accepted',
+  ],
+  'Western Europe': [
+    'To Contact',
+    'Old Leads to Qualify',
+    'Follow Up',
+    'PHASE #1/Automation',
+    'Proposal Accepted',
+    'Proposal Sent',
+    'Reengage',
+    'Calendly Booked',
+  ],
+};
+
+const ALLOWED_OWNER_IDS = ['58', '74', '85', '89', '95', '96', '111', '117', '18'];
+
 export default function Tab1Pipeline() {
   const [deals, setDeals] = useState<Deal[]>([]);
+  const [ownerNames, setOwnerNames] = useState<Map<string, string>>(new Map());
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedPipeline, setSelectedPipeline] = useState<string>('');
@@ -21,8 +113,24 @@ export default function Tab1Pipeline() {
     setError(null);
     
     try {
+      // Load deals from CSV
       const loadedDeals = await loadDealsCSV();
       setDeals(loadedDeals);
+
+      // Load owner names from API
+      const response = await fetch('/api/ac-proxy?endpoint=' + encodeURIComponent('/api/3/users?limit=100'));
+      if (response.ok) {
+        const data = await response.json();
+        const names = new Map<string, string>();
+        if (data.users) {
+          data.users.forEach((user: any) => {
+            const fullName = `${user.firstName || ''} ${user.lastName || ''}`.trim();
+            const cleanName = cleanOwnerName(fullName);
+            names.set(user.id, cleanName || user.email || `User ${user.id}`);
+          });
+        }
+        setOwnerNames(names);
+      }
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Unknown error occurred';
       setError(errorMessage);
@@ -31,23 +139,17 @@ export default function Tab1Pipeline() {
     }
   };
 
-  // Get unique pipelines (excluding empty/null)
-  const pipelines = useMemo(() => {
-    const uniquePipelines = new Set<string>();
-    deals.forEach(deal => {
-      if (deal.Pipeline && deal.Pipeline.trim()) {
-        uniquePipelines.add(deal.Pipeline.trim());
-      }
-    });
-    return Array.from(uniquePipelines).sort();
-  }, [deals]);
+  // Get available pipelines (sorted A-Z)
+  const availablePipelines = useMemo(() => {
+    return Object.keys(PIPELINE_STAGES).sort();
+  }, []);
 
   // Set default pipeline when loaded
   useEffect(() => {
-    if (pipelines.length > 0 && !selectedPipeline) {
-      setSelectedPipeline(pipelines[0]);
+    if (availablePipelines.length > 0 && !selectedPipeline) {
+      setSelectedPipeline(availablePipelines[0]);
     }
-  }, [pipelines, selectedPipeline]);
+  }, [availablePipelines, selectedPipeline]);
 
   // Filter deals based on selections
   const filteredDeals = useMemo(() => {
@@ -60,14 +162,18 @@ export default function Tab1Pipeline() {
       // Must match selected pipeline
       if (deal.Pipeline?.trim() !== selectedPipeline) return false;
 
-      // Exclude operator
-      if (shouldExcludeOwner(deal['Owner Name'])) return false;
+      // Must be from allowed owner IDs
+      const ownerId = deal['Owner ID'];
+      if (!ALLOWED_OWNER_IDS.includes(ownerId)) return false;
+
+      // Exclude "Unknown" stage
+      if (!deal.Stage || deal.Stage === 'Unknown') return false;
 
       // Date filtering
       if (startDate && endDate) {
         const start = parseCSVDate(startDate);
         const end = parseCSVDate(endDate);
-        if (!start || !end) return true; // If invalid dates, include all
+        if (!start || !end) return true;
         
         return isDateInRange(deal['DISTRIBUTION Time'], start, end);
       }
@@ -76,16 +182,17 @@ export default function Tab1Pipeline() {
     });
   }, [deals, selectedPipeline, startDate, endDate]);
 
-  // Calculate metrics
+  // Calculate metrics grouped by Owner ID
   const metrics = useMemo((): PipelineMetrics[] => {
     const metricsMap = new Map<string, PipelineMetrics>();
 
     filteredDeals.forEach(deal => {
-      const cleanName = cleanOwnerName(deal['Owner Name']);
+      const ownerId = deal['Owner ID'];
+      const ownerName = ownerNames.get(ownerId) || `User ${ownerId}`;
       
-      if (!metricsMap.has(cleanName)) {
-        metricsMap.set(cleanName, {
-          owner: cleanName,
+      if (!metricsMap.has(ownerId)) {
+        metricsMap.set(ownerId, {
+          owner: ownerName,
           stages: {},
           lostBreakdown: {
             unreachable: 0,
@@ -94,8 +201,11 @@ export default function Tab1Pipeline() {
         });
       }
 
-      const metric = metricsMap.get(cleanName)!;
+      const metric = metricsMap.get(ownerId)!;
       const stage = deal.Stage || 'Unknown';
+
+      // Skip Unknown stages
+      if (stage === 'Unknown') return;
 
       if (!metric.stages[stage]) {
         metric.stages[stage] = { open: 0, lost: 0 };
@@ -120,16 +230,13 @@ export default function Tab1Pipeline() {
     return Array.from(metricsMap.values()).sort((a, b) => 
       a.owner.localeCompare(b.owner)
     );
-  }, [filteredDeals]);
+  }, [filteredDeals, ownerNames]);
 
-  // Get all unique stages
-  const allStages = useMemo(() => {
-    const stages = new Set<string>();
-    metrics.forEach(metric => {
-      Object.keys(metric.stages).forEach(stage => stages.add(stage));
-    });
-    return Array.from(stages).sort();
-  }, [metrics]);
+  // Get stages for selected pipeline (in order)
+  const pipelineStages = useMemo(() => {
+    if (!selectedPipeline) return [];
+    return PIPELINE_STAGES[selectedPipeline] || [];
+  }, [selectedPipeline]);
 
   if (isLoading) {
     return (
@@ -177,7 +284,7 @@ export default function Tab1Pipeline() {
               onChange={(e) => setSelectedPipeline(e.target.value)}
               className="w-full px-4 py-2.5 border border-gray-300 rounded-lg text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
             >
-              {pipelines.map(pipeline => (
+              {availablePipelines.map(pipeline => (
                 <option key={pipeline} value={pipeline}>
                   {pipeline}
                 </option>
@@ -188,28 +295,26 @@ export default function Tab1Pipeline() {
           {/* Start Date */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
-              Distribution Date From (DD/MM/YYYY)
+              Distribution Date From
             </label>
             <input
-              type="text"
-              placeholder="21/10/2025"
+              type="date"
               value={startDate}
               onChange={(e) => setStartDate(e.target.value)}
-              className="w-full px-4 py-2.5 border border-gray-300 rounded-lg text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              className="w-full px-4 py-2.5 border border-gray-300 rounded-lg text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
             />
           </div>
 
           {/* End Date */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
-              Distribution Date To (DD/MM/YYYY)
+              Distribution Date To
             </label>
             <input
-              type="text"
-              placeholder="22/10/2025"
+              type="date"
               value={endDate}
               onChange={(e) => setEndDate(e.target.value)}
-              className="w-full px-4 py-2.5 border border-gray-300 rounded-lg text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              className="w-full px-4 py-2.5 border border-gray-300 rounded-lg text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
             />
           </div>
         </div>
@@ -233,7 +338,7 @@ export default function Tab1Pipeline() {
                 <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700 sticky left-0 bg-gray-50 z-10">
                   Deal Owner
                 </th>
-                {allStages.map(stage => (
+                {pipelineStages.map(stage => (
                   <th key={stage} className="px-6 py-3 text-center text-sm font-semibold text-gray-700">
                     {stage}
                   </th>
@@ -249,7 +354,7 @@ export default function Tab1Pipeline() {
                       <div className="text-sm font-medium text-gray-900">{metric.owner}</div>
                       <div className="text-sm text-green-600">Open Deals</div>
                     </td>
-                    {allStages.map(stage => {
+                    {pipelineStages.map(stage => {
                       const stageData = metric.stages[stage];
                       return (
                         <td key={stage} className="px-6 py-4 text-center text-sm font-semibold text-gray-900">
@@ -265,7 +370,7 @@ export default function Tab1Pipeline() {
                       <div className="text-sm font-medium text-gray-900">{metric.owner}</div>
                       <div className="text-sm text-red-600">Lost Deals</div>
                     </td>
-                    {allStages.map(stage => {
+                    {pipelineStages.map(stage => {
                       const stageData = metric.stages[stage];
                       return (
                         <td key={stage} className="px-6 py-4 text-center text-sm font-semibold text-gray-900">
@@ -278,9 +383,9 @@ export default function Tab1Pipeline() {
                   {/* Lost Breakdown Row */}
                   <tr key={`${metric.owner}-breakdown`} className="bg-yellow-50 hover:bg-yellow-100 transition-colors">
                     <td className="px-6 py-3 sticky left-0 bg-yellow-50 z-10">
-                      <div className="text-sm font-medium text-gray-700 pl-4">↳ Lost (U + UHV)</div>
+                      <div className="text-sm font-medium text-gray-700 pl-4">↳ Lost (Unreachable + Unresponsive High Value)</div>
                     </td>
-                    <td colSpan={allStages.length} className="px-6 py-3 text-center text-sm font-semibold text-gray-900">
+                    <td colSpan={pipelineStages.length} className="px-6 py-3 text-center text-sm font-semibold text-gray-900">
                       {metric.lostBreakdown.unreachable} + {metric.lostBreakdown.unresponsiveHighValue}
                     </td>
                   </tr>
@@ -289,7 +394,7 @@ export default function Tab1Pipeline() {
 
               {metrics.length === 0 && (
                 <tr>
-                  <td colSpan={allStages.length + 1} className="px-6 py-8 text-center text-gray-500">
+                  <td colSpan={pipelineStages.length + 1} className="px-6 py-8 text-center text-gray-500">
                     No deals found matching the selected filters
                   </td>
                 </tr>

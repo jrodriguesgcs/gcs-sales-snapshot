@@ -17,23 +17,20 @@ export async function loadDealsCSV(): Promise<Deal[]> {
         skipEmptyLines: true,
         dynamicTyping: false,
         transformHeader: (header: string) => header.trim(),
-        // Make parser more lenient
         quoteChar: '"',
         escapeChar: '"',
         delimiter: ',',
         newline: '\n',
-        // Skip bad rows instead of failing
         skipFirstNLines: 0,
         complete: (results) => {
-          // Log errors but don't fail
           if (results.errors.length > 0) {
             console.warn(`CSV parsing warnings (${results.errors.length} rows skipped):`, 
-              results.errors.slice(0, 5)); // Only show first 5 errors
+              results.errors.slice(0, 5));
           }
           
           // Filter out rows with missing critical fields
           const validDeals = (results.data as Deal[]).filter(deal => {
-            return deal['Deal ID'] && deal['Owner Name'] && deal.Pipeline;
+            return deal['Deal ID'] && deal['Owner Name'] && deal.Pipeline && deal['Owner ID'];
           });
           
           console.log(`✅ Loaded ${validDeals.length} valid deals (${results.data.length - validDeals.length} skipped due to missing fields)`);
