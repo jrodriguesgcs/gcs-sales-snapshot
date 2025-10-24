@@ -30,19 +30,21 @@ export default function Tab2Tasks() {
 
   if (error) {
     return (
-      <div className="bg-red-50 border border-red-200 rounded-xl p-6">
+      <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-6">
         <div className="flex items-start">
-          <svg className="w-6 h-6 text-red-600 mr-3 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+          <svg className="w-6 h-6 text-yellow-600 mr-3 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
           </svg>
           <div>
-            <h3 className="text-red-900 font-semibold mb-1">Failed to load task metrics</h3>
-            <p className="text-red-700 text-sm">{error}</p>
+            <h3 className="text-yellow-900 font-semibold mb-1">Metrics Not Yet Available</h3>
+            <p className="text-yellow-700 text-sm mb-3">
+              Task metrics are calculated daily at 5:00 AM Lisbon time. Please check back after the next calculation runs.
+            </p>
             <button
               onClick={loadMetrics}
-              className="mt-3 text-sm bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg transition-colors"
+              className="text-sm bg-yellow-600 hover:bg-yellow-700 text-white px-4 py-2 rounded-lg transition-colors"
             >
-              Retry
+              Check Again
             </button>
           </div>
         </div>
@@ -55,11 +57,7 @@ export default function Tab2Tasks() {
       <div className="text-center py-12">
         <div className="animate-spin rounded-full h-16 w-16 border-b-4 border-blue-600 mx-auto mb-4"></div>
         <h3 className="text-xl font-bold text-gray-900 mb-2">Loading Task Metrics</h3>
-        <p className="text-gray-600">
-          Calculating metrics from all deals and tasks...
-          <br />
-          <span className="text-sm text-gray-500">This may take 2-3 minutes on first load, then results are cached for 1 hour.</span>
-        </p>
+        <p className="text-gray-600 text-sm">Retrieving pre-calculated metrics...</p>
       </div>
     );
   }
@@ -72,19 +70,17 @@ export default function Tab2Tasks() {
       <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-200">
         <div className="flex items-center justify-between">
           <p className="text-sm text-gray-500">
-            Showing metrics for {metrics.length} deal owners
+            Showing metrics for {metrics.length} deal owners (last 12 months)
           </p>
           {metricsData && (
             <div className="flex items-center space-x-2">
-              {metricsData.cached ? (
-                <span className="text-xs text-green-600 bg-green-50 px-3 py-1 rounded-full">
-                  ✓ Cached data from {new Date(metricsData.cachedAt!).toLocaleTimeString()}
-                </span>
-              ) : (
-                <span className="text-xs text-blue-600 bg-blue-50 px-3 py-1 rounded-full">
-                  ✓ Fresh data calculated at {new Date(metricsData.calculatedAt!).toLocaleTimeString()}
-                </span>
-              )}
+              <span className="text-xs text-green-600 bg-green-50 px-3 py-1 rounded-full">
+                ✓ Calculated at {new Date(metricsData.calculatedAt!).toLocaleString('en-US', { 
+                  timeZone: 'Europe/Lisbon',
+                  dateStyle: 'short',
+                  timeStyle: 'short'
+                })} (Lisbon time)
+              </span>
               <button
                 onClick={loadMetrics}
                 className="text-xs text-gray-600 hover:text-gray-900 underline"
