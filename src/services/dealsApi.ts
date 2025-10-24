@@ -88,7 +88,7 @@ export async function fetchDealsAndTasks(
   const allDeals: Deal[] = [];
   const allTasks: DealTask[] = [];
 
-  // Step 1: Load all deals for each owner
+  // Step 1: Load all deals for each owner (sequentially to avoid progress jumping)
   onProgress({
     phase: 'users',
     message: 'Loading deals for all owners...',
@@ -97,48 +97,45 @@ export async function fetchDealsAndTasks(
     percentage: 0,
   });
 
-  const dealsByOwner = await Promise.all(
-    OWNER_IDS.map(async (ownerId, index) => {
-      const ownerDeals: Deal[] = [];
-      let offset = 0;
-      const limit = 100;
-      let hasMore = true;
+  for (let index = 0; index < OWNER_IDS.length; index++) {
+    const ownerId = OWNER_IDS[index];
+    const ownerDeals: Deal[] = [];
+    let offset = 0;
+    const limit = 100;
+    let hasMore = true;
 
-      while (hasMore) {
-        try {
-          const endpoint = `/api/3/deals?filters[owner]=${ownerId}&limit=${limit}&offset=${offset}`;
-          const data = await rateLimiter.throttle(() => fetchFromAPI(endpoint));
+    while (hasMore) {
+      try {
+        const endpoint = `/api/3/deals?filters[owner]=${ownerId}&limit=${limit}&offset=${offset}`;
+        const data = await rateLimiter.throttle(() => fetchFromAPI(endpoint));
 
-          if (data.deals && data.deals.length > 0) {
-            ownerDeals.push(...data.deals);
-            offset += limit;
-            hasMore = data.deals.length === limit;
-          } else {
-            hasMore = false;
-          }
-        } catch (error) {
-          console.error(`Error loading deals for owner ${ownerId}:`, error);
+        if (data.deals && data.deals.length > 0) {
+          ownerDeals.push(...data.deals);
+          offset += limit;
+          hasMore = data.deals.length === limit;
+        } else {
           hasMore = false;
         }
+      } catch (error) {
+        console.error(`Error loading deals for owner ${ownerId}:`, error);
+        hasMore = false;
       }
+    }
 
-      onProgress({
-        phase: 'users',
-        message: `Loaded deals for owner ${index + 1}/${OWNER_IDS.length} (${ownerDeals.length} deals)`,
-        current: index + 1,
-        total: OWNER_IDS.length,
-        percentage: ((index + 1) / OWNER_IDS.length) * 50,
-      });
+    allDeals.push(...ownerDeals);
 
-      return ownerDeals;
-    })
-  );
-
-  dealsByOwner.forEach(deals => allDeals.push(...deals));
+    onProgress({
+      phase: 'users',
+      message: `Loaded deals for owner ${index + 1}/${OWNER_IDS.length} (${ownerDeals.length} deals, ${allDeals.length} total)`,
+      current: index + 1,
+      total: OWNER_IDS.length,
+      percentage: ((index + 1) / OWNER_IDS.length) * 50,
+    });
+  }
 
   console.log(`✅ Total deals loaded: ${allDeals.length}`);
 
-  // Step 2: Load tasks for all deals
+  // Step 2: Load tasks for all deals with thread-safe progress tracking
   onProgress({
     phase: 'tasks',
     message: 'Loading tasks for all deals...',
@@ -146,6 +143,9 @@ export async function fetchDealsAndTasks(
     total: allDeals.length,
     percentage: 50,
   });
+
+  let processedDeals = 0;
+  const progressLock = { value: 0 };
 
   // Process deals in batches using 20 workers
   const batchSize = Math.ceil(allDeals.length / 20);
@@ -172,16 +172,23 @@ export async function fetchDealsAndTasks(
           workerTasks.push(...tasks);
         }
 
-        // Update progress
-        onProgress({
-          phase: 'tasks',
-          message: `Loading tasks: ${i + 1}/${allDeals.length} deals processed`,
-          current: i + 1,
-          total: allDeals.length,
-          percentage: 50 + ((i + 1) / allDeals.length) * 50,
-        });
+        // Thread-safe progress update
+        processedDeals++;
+        const current = processedDeals;
+
+        // Only update progress every 10 deals to reduce UI updates
+        if (current % 10 === 0 || current === allDeals.length) {
+          onProgress({
+            phase: 'tasks',
+            message: `Loading tasks: ${current}/${allDeals.length} deals processed`,
+            current: current,
+            total: allDeals.length,
+            percentage: 50 + (current / allDeals.length) * 50,
+          });
+        }
       } catch (error) {
         console.error(`Error loading tasks for deal ${deal.id}:`, error);
+        processedDeals++;
       }
     }
 
