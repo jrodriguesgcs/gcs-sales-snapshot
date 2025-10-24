@@ -1,4 +1,4 @@
-export default async function handler(req: any, res: any) {
+module.exports = async function handler(req, res) {
   // CORS headers
   res.setHeader('Access-Control-Allow-Credentials', 'true');
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -73,4 +73,4 @@ export default async function handler(req: any, res: any) {
       stack: error instanceof Error ? error.stack : undefined
     });
   }
-}
+};
