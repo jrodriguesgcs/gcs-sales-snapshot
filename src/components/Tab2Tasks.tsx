@@ -20,9 +20,7 @@ export default function Tab2Tasks() {
   });
   const [dateFilter, setDateFilter] = useState<DateFilter>('last7days');
   const [error, setError] = useState<string | null>(null);
-  const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [hasMoreTasks, setHasMoreTasks] = useState(true);
-  const [currentOffset, setCurrentOffset] = useState(0);
   const backgroundLoadingRef = useRef<boolean>(false);
   const nextBatchRef = useRef<Task[]>([]);
 
@@ -34,7 +32,6 @@ export default function Tab2Tasks() {
     setIsLoading(true);
     setError(null);
     setTasks([]);
-    setCurrentOffset(0);
     setHasMoreTasks(true);
     nextBatchRef.current = [];
 
@@ -46,7 +43,6 @@ export default function Tab2Tasks() {
       // Load first 1000 tasks
       const initialTasks = await fetchTasks(dateFilter, setLoadingProgress, 1000);
       setTasks(initialTasks);
-      setCurrentOffset(1000);
 
       if (initialTasks.length < 1000) {
         setHasMoreTasks(false);
@@ -98,7 +94,6 @@ export default function Tab2Tasks() {
   const handleLoadMore = () => {
     if (nextBatchRef.current.length > 0) {
       setTasks(prev => [...prev, ...nextBatchRef.current]);
-      setCurrentOffset(prev => prev + nextBatchRef.current.length);
       
       const loadedCount = nextBatchRef.current.length;
       nextBatchRef.current = [];

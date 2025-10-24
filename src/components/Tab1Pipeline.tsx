@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
-import { Deal, PipelineMetrics, DateFilter } from '../types/deals';
+import { Deal, PipelineMetrics } from '../types/deals';
 import { loadDealsCSV } from '../services/csvParser';
-import { parseCSVDate, formatDateDisplay, isDateInRange } from '../utils/dateUtils';
+import { parseCSVDate, isDateInRange } from '../utils/dateUtils';
 import { cleanOwnerName, shouldExcludeOwner } from '../utils/nameUtils';
 
 export default function Tab1Pipeline() {
