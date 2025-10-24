@@ -1,110 +1,33 @@
 import { useState, useEffect } from 'react';
-import { TaskMetrics, LoadingProgress as LoadingProgressType } from '../types/tasks';
-import { fetchDealsAndTasks, Deal, DealTask } from '../services/dealsApi';
-import { fetchUsers } from '../services/tasksApi';
-import { isTaskOverdue, isTaskFutureDueDate } from '../utils/dateUtils';
-import { cleanOwnerName } from '../utils/nameUtils';
-import LoadingProgress from './LoadingProgress';
+import { TaskMetrics } from '../types/tasks';
+import { fetchTaskMetrics, MetricsResponse } from '../services/metricsApi';
 
 export default function Tab2Tasks() {
-  const [deals, setDeals] = useState<Deal[]>([]);
-  const [tasks, setTasks] = useState<DealTask[]>([]);
-  const [userMap, setUserMap] = useState<Map<string, string>>(new Map());
+  const [metricsData, setMetricsData] = useState<MetricsResponse | null>(null);
   const [isLoading, setIsLoading] = useState(false);
-  const [loadingProgress, setLoadingProgress] = useState<LoadingProgressType>({
-    phase: 'idle',
-    message: '',
-    current: 0,
-    total: 0,
-    percentage: 0,
-  });
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    loadInitialData();
+    loadMetrics();
   }, []);
 
-  const loadInitialData = async () => {
+  const loadMetrics = async () => {
     setIsLoading(true);
     setError(null);
 
     try {
-      // Load users first to get owner names
-      console.log('🔵 Loading users...');
-      const users = await fetchUsers(setLoadingProgress);
-      console.log('✅ Users loaded:', users.size);
-      setUserMap(users);
-
-      // Load deals and tasks
-      console.log('🔵 Loading deals and tasks...');
-      const { deals: loadedDeals, tasks: loadedTasks } = await fetchDealsAndTasks(setLoadingProgress);
-      
-      console.log('✅ Deals loaded:', loadedDeals.length);
-      console.log('✅ Tasks loaded:', loadedTasks.length);
-      
-      setDeals(loadedDeals);
-      setTasks(loadedTasks);
+      console.log('🔵 Fetching task metrics from backend...');
+      const data = await fetchTaskMetrics();
+      console.log('✅ Metrics received:', data);
+      setMetricsData(data);
     } catch (err) {
-      console.error('❌ Error loading data:', err);
-      const errorMessage = err instanceof Error ? err.message : 'Failed to load data';
+      console.error('❌ Error loading metrics:', err);
+      const errorMessage = err instanceof Error ? err.message : 'Failed to load metrics';
       setError(errorMessage);
     } finally {
       setIsLoading(false);
     }
   };
-
-  // Calculate metrics by deal owner
-  const metrics: TaskMetrics[] = (() => {
-    const metricsMap = new Map<string, TaskMetrics>();
-
-    // Group tasks by deal owner
-    deals.forEach(deal => {
-      const ownerId = deal.owner;
-      const ownerName = userMap.get(ownerId) || `User ${ownerId}`;
-      const cleanName = cleanOwnerName(ownerName);
-
-      if (!metricsMap.has(ownerId)) {
-        metricsMap.set(ownerId, {
-          owner: cleanName,
-          ownerId: ownerId,
-          total: 0,
-          completed: 0,
-          overdue: 0,
-          openFutureDueDate: 0,
-          openNoDueDate: 0,
-        });
-      }
-
-      const metric = metricsMap.get(ownerId)!;
-
-      // Find all tasks for this deal
-      const dealTasks = tasks.filter(task => task.dealId === deal.id);
-
-      dealTasks.forEach(task => {
-        metric.total++;
-
-        const isCompleted = task.status === 1 || task.status === '1';
-
-        if (isCompleted) {
-          metric.completed++;
-        } else {
-          // Incomplete task - categorize by due date status
-          if (!task.duedate) {
-            metric.openNoDueDate++;
-          } else if (isTaskOverdue(task)) {
-            metric.overdue++;
-          } else if (isTaskFutureDueDate(task)) {
-            metric.openFutureDueDate++;
-          }
-        }
-      });
-    });
-
-    // Convert to array and sort by owner name (A-Z)
-    return Array.from(metricsMap.values()).sort((a, b) =>
-      a.owner.localeCompare(b.owner)
-    );
-  })();
 
   if (error) {
     return (
@@ -114,10 +37,10 @@ export default function Tab2Tasks() {
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
           </svg>
           <div>
-            <h3 className="text-red-900 font-semibold mb-1">Failed to load tasks</h3>
+            <h3 className="text-red-900 font-semibold mb-1">Failed to load task metrics</h3>
             <p className="text-red-700 text-sm">{error}</p>
             <button
-              onClick={loadInitialData}
+              onClick={loadMetrics}
               className="mt-3 text-sm bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg transition-colors"
             >
               Retry
@@ -128,15 +51,50 @@ export default function Tab2Tasks() {
     );
   }
 
+  if (isLoading) {
+    return (
+      <div className="text-center py-12">
+        <div className="animate-spin rounded-full h-16 w-16 border-b-4 border-blue-600 mx-auto mb-4"></div>
+        <h3 className="text-xl font-bold text-gray-900 mb-2">Loading Task Metrics</h3>
+        <p className="text-gray-600">
+          Calculating metrics from all deals and tasks...
+          <br />
+          <span className="text-sm text-gray-500">This may take 2-3 minutes on first load, then results are cached for 1 hour.</span>
+        </p>
+      </div>
+    );
+  }
+
+  const metrics = metricsData?.metrics || [];
+
   return (
     <div className="space-y-6">
-      {isLoading && <LoadingProgress progress={loadingProgress} />}
-
       {/* Summary */}
       <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-200">
-        <p className="text-sm text-gray-500">
-          Showing {tasks.length} tasks from {deals.length} deals across {metrics.length} owners
-        </p>
+        <div className="flex items-center justify-between">
+          <p className="text-sm text-gray-500">
+            Showing metrics for {metrics.length} deal owners
+          </p>
+          {metricsData && (
+            <div className="flex items-center space-x-2">
+              {metricsData.cached ? (
+                <span className="text-xs text-green-600 bg-green-50 px-3 py-1 rounded-full">
+                  ✓ Cached data from {new Date(metricsData.cachedAt!).toLocaleTimeString()}
+                </span>
+              ) : (
+                <span className="text-xs text-blue-600 bg-blue-50 px-3 py-1 rounded-full">
+                  ✓ Fresh data calculated at {new Date(metricsData.calculatedAt!).toLocaleTimeString()}
+                </span>
+              )}
+              <button
+                onClick={loadMetrics}
+                className="text-xs text-gray-600 hover:text-gray-900 underline"
+              >
+                Refresh
+              </button>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Metrics Table */}
@@ -185,7 +143,7 @@ export default function Tab2Tasks() {
               {metrics.length === 0 && !isLoading && (
                 <tr>
                   <td colSpan={6} className="px-6 py-8 text-center text-gray-500">
-                    No tasks found
+                    No metrics found
                   </td>
                 </tr>
               )}
