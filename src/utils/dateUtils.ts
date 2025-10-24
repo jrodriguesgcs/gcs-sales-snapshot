@@ -47,8 +47,10 @@ export function getDateRangeFromFilter(filter: 'last7days' | 'last30days' | 'all
 }
 
 // Check if task is overdue: incomplete AND due date < today
-export function isTaskOverdue(task: { status: number; duedate: string | null }): boolean {
-  if (task.status === 1) return false; // Completed tasks are not overdue
+export function isTaskOverdue(task: { status: string | number; duedate: string | null }): boolean {
+  // ✅ Handle both string and number status
+  const isComplete = task.status === 1 || task.status === '1';
+  if (isComplete) return false; // Completed tasks are not overdue
   if (!task.duedate) return false; // No due date = not overdue
   
   try {

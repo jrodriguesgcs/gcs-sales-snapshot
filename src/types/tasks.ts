@@ -1,9 +1,9 @@
 export interface Task {
   id: string;
   title: string;
-  status: number; // 0 = incomplete, 1 = complete
+  status: string | number; // ✅ Changed to accept both string and number
   duedate: string | null;
-  assignee: string; // ✅ Changed from assignee_userid
+  assignee: string;
   cdate: string;
 }
 
