@@ -1,14 +1,14 @@
-import { useState, useEffect, useRef } from 'react';
-import { Task, TaskMetrics, LoadingProgress as LoadingProgressType } from '../types/tasks';
-import { fetchUsers, fetchTasks } from '../services/tasksApi';
+import { useState, useEffect } from 'react';
+import { TaskMetrics, LoadingProgress as LoadingProgressType } from '../types/tasks';
+import { fetchDealsAndTasks, Deal, DealTask } from '../services/dealsApi';
+import { fetchUsers } from '../services/tasksApi';
 import { isTaskOverdue } from '../utils/dateUtils';
-import { shouldExcludeOwner } from '../utils/nameUtils';
+import { cleanOwnerName } from '../utils/nameUtils';
 import LoadingProgress from './LoadingProgress';
 
-type DateFilter = 'last7days' | 'last30days' | 'alltime';
-
 export default function Tab2Tasks() {
-  const [tasks, setTasks] = useState<Task[]>([]);
+  const [deals, setDeals] = useState<Deal[]>([]);
+  const [tasks, setTasks] = useState<DealTask[]>([]);
   const [userMap, setUserMap] = useState<Map<string, string>>(new Map());
   const [isLoading, setIsLoading] = useState(false);
   const [loadingProgress, setLoadingProgress] = useState<LoadingProgressType>({
@@ -18,140 +18,55 @@ export default function Tab2Tasks() {
     total: 0,
     percentage: 0,
   });
-  const [dateFilter, setDateFilter] = useState<DateFilter>('last7days');
   const [error, setError] = useState<string | null>(null);
-  const [hasMoreTasks, setHasMoreTasks] = useState(true);
-  const [currentOffset, setCurrentOffset] = useState(0); // ✅ Track offset for pagination
-  const backgroundLoadingRef = useRef<boolean>(false);
-  const nextBatchRef = useRef<Task[]>([]);
 
   useEffect(() => {
     loadInitialData();
-  }, [dateFilter]);
+  }, []);
 
   const loadInitialData = async () => {
     setIsLoading(true);
     setError(null);
-    setTasks([]);
-    setHasMoreTasks(true);
-    setCurrentOffset(0); // ✅ Reset offset
-    nextBatchRef.current = [];
 
     try {
-      // Load users first
-      console.log('🔵 Starting to load users...');
+      // Load users first to get owner names
+      console.log('🔵 Loading users...');
       const users = await fetchUsers(setLoadingProgress);
-      console.log('✅ Users loaded:', users.size, 'users');
-      console.log('👥 User map sample:', Array.from(users.entries()).slice(0, 3));
+      console.log('✅ Users loaded:', users.size);
       setUserMap(users);
 
-      if (users.size === 0) {
-        throw new Error('No users loaded from API. Check API credentials.');
-      }
-
-      // Load first 1000 tasks
-      console.log('🔵 Starting to load tasks...');
-      const initialTasks = await fetchTasks(dateFilter, setLoadingProgress, 1000, 0);
-      console.log('✅ Tasks loaded:', initialTasks.length);
-      console.log('📋 First task sample:', initialTasks[0]);
-      setTasks(initialTasks);
-      setCurrentOffset(1000); // ✅ Set offset for next batch
-
-      if (initialTasks.length < 1000) {
-        setHasMoreTasks(false);
-        setLoadingProgress({
-          phase: 'complete',
-          message: '✓ All tasks loaded',
-          current: initialTasks.length,
-          total: initialTasks.length,
-          percentage: 100,
-        });
-      } else {
-        // Start background loading next batch
-        startBackgroundLoading(1000); // ✅ Pass current offset
-      }
+      // Load deals and tasks
+      console.log('🔵 Loading deals and tasks...');
+      const { deals: loadedDeals, tasks: loadedTasks } = await fetchDealsAndTasks(setLoadingProgress);
+      
+      console.log('✅ Deals loaded:', loadedDeals.length);
+      console.log('✅ Tasks loaded:', loadedTasks.length);
+      
+      setDeals(loadedDeals);
+      setTasks(loadedTasks);
     } catch (err) {
       console.error('❌ Error loading data:', err);
-      const errorMessage = err instanceof Error ? err.message : 'Failed to load tasks';
+      const errorMessage = err instanceof Error ? err.message : 'Failed to load data';
       setError(errorMessage);
     } finally {
       setIsLoading(false);
     }
   };
 
-  const startBackgroundLoading = async (offset: number) => { // ✅ Accept offset parameter
-    if (backgroundLoadingRef.current) return;
-    backgroundLoadingRef.current = true;
-
-    try {
-      console.log(`🔄 Background loading next batch from offset ${offset}...`);
-      const nextBatch = await fetchTasks(
-        dateFilter,
-        (progress) => {
-          // Silent background loading
-          console.log('Background loading:', progress);
-        },
-        1000,
-        offset // ✅ Use passed offset
-      );
-
-      console.log(`✅ Background batch loaded: ${nextBatch.length} tasks`);
-      nextBatchRef.current = nextBatch;
-
-      if (nextBatch.length < 1000) {
-        setHasMoreTasks(false);
-      }
-    } catch (error) {
-      console.error('Background loading error:', error);
-      setHasMoreTasks(false); // ✅ Stop trying if error
-    } finally {
-      backgroundLoadingRef.current = false;
-    }
-  };
-
-  const handleLoadMore = () => {
-    if (nextBatchRef.current.length > 0) {
-      const loadedCount = nextBatchRef.current.length;
-      setTasks(prev => [...prev, ...nextBatchRef.current]);
-      
-      const newOffset = currentOffset + loadedCount;
-      setCurrentOffset(newOffset); // ✅ Update offset
-      
-      console.log(`📥 Loaded ${loadedCount} more tasks. New offset: ${newOffset}`);
-      nextBatchRef.current = [];
-
-      if (loadedCount >= 1000) {
-        // Start loading next batch in background
-        startBackgroundLoading(newOffset); // ✅ Pass new offset
-      } else {
-        setHasMoreTasks(false);
-        setLoadingProgress({
-          phase: 'complete',
-          message: '✓ All tasks loaded',
-          current: tasks.length + loadedCount,
-          total: tasks.length + loadedCount,
-          percentage: 100,
-        });
-      }
-    }
-  };
-
-  // Calculate metrics
+  // Calculate metrics by deal owner
   const metrics: TaskMetrics[] = (() => {
     const metricsMap = new Map<string, TaskMetrics>();
 
-    tasks.forEach(task => {
-      const userId = task.assignee;
-      const userName = userMap.get(userId) || `User ${userId}`;
+    // Group tasks by deal owner
+    deals.forEach(deal => {
+      const ownerId = deal.owner;
+      const ownerName = userMap.get(ownerId) || `User ${ownerId}`;
+      const cleanName = cleanOwnerName(ownerName);
 
-      // Exclude operator (ID 16)
-      if (userId === '16' || shouldExcludeOwner(userName, userId)) {
-        return;
-      }
-
-      if (!metricsMap.has(userName)) {
-        metricsMap.set(userName, {
-          owner: userName,
+      if (!metricsMap.has(ownerId)) {
+        metricsMap.set(ownerId, {
+          owner: cleanName,
+          ownerId: ownerId,
           total: 0,
           completed: 0,
           overdue: 0,
@@ -159,28 +74,30 @@ export default function Tab2Tasks() {
         });
       }
 
-      const metric = metricsMap.get(userName)!;
-      metric.total++;
+      const metric = metricsMap.get(ownerId)!;
 
-      // ✅ FIX: status is a string, not a number!
-      const isCompleted = task.status === 1 || task.status === '1';
-      
-      console.log(`Task ${task.id}: status="${task.status}" (type: ${typeof task.status}), isCompleted=${isCompleted}`);
+      // Find all tasks for this deal
+      const dealTasks = tasks.filter(task => task.dealId === deal.id);
 
-      if (isCompleted) {
-        metric.completed++;
-      } else {
-        // Incomplete
-        if (!task.duedate) {
-          metric.incompleteNoDueDate++;
-        } else if (isTaskOverdue(task)) {
-          metric.overdue++;
+      dealTasks.forEach(task => {
+        metric.total++;
+
+        const isCompleted = task.status === 1 || task.status === '1';
+
+        if (isCompleted) {
+          metric.completed++;
+        } else {
+          // Incomplete
+          if (!task.duedate) {
+            metric.incompleteNoDueDate++;
+          } else if (isTaskOverdue(task)) {
+            metric.overdue++;
+          }
         }
-      }
+      });
     });
 
-    console.log('📊 Final metrics:', Array.from(metricsMap.entries()));
-
+    // Convert to array and sort by owner name (A-Z)
     return Array.from(metricsMap.values()).sort((a, b) =>
       a.owner.localeCompare(b.owner)
     );
@@ -212,54 +129,17 @@ export default function Tab2Tasks() {
     <div className="space-y-6">
       {isLoading && <LoadingProgress progress={loadingProgress} />}
 
-      {/* Date Filter */}
+      {/* Summary */}
       <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-200">
-        <div className="flex items-center space-x-4">
-          <label className="text-sm font-medium text-gray-700">Task Created Date:</label>
-          <div className="flex space-x-2">
-            <button
-              onClick={() => setDateFilter('last7days')}
-              className={`px-4 py-2 rounded-lg font-medium transition-all text-sm ${
-                dateFilter === 'last7days'
-                  ? 'bg-blue-600 text-white shadow-md'
-                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-              }`}
-            >
-              Last 7 Days
-            </button>
-            <button
-              onClick={() => setDateFilter('last30days')}
-              className={`px-4 py-2 rounded-lg font-medium transition-all text-sm ${
-                dateFilter === 'last30days'
-                  ? 'bg-blue-600 text-white shadow-md'
-                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-              }`}
-            >
-              Last 30 Days
-            </button>
-            <button
-              onClick={() => setDateFilter('alltime')}
-              className={`px-4 py-2 rounded-lg font-medium transition-all text-sm ${
-                dateFilter === 'alltime'
-                  ? 'bg-blue-600 text-white shadow-md'
-                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-              }`}
-            >
-              All Time
-            </button>
-          </div>
-        </div>
-
-        <p className="text-sm text-gray-500 mt-4">
-          Showing {tasks.length} tasks
-          {!hasMoreTasks && ' (all tasks loaded)'}
+        <p className="text-sm text-gray-500">
+          Showing {tasks.length} tasks from {deals.length} deals across {metrics.length} owners
         </p>
       </div>
 
       {/* Metrics Table */}
       <div className="bg-white rounded-xl shadow-sm overflow-hidden border border-gray-200">
         <div className="bg-white px-6 py-4 border-b border-gray-200">
-          <h3 className="text-base font-semibold text-gray-900">Task Metrics by Owner</h3>
+          <h3 className="text-base font-semibold text-gray-900">Task Metrics by Deal Owner</h3>
           <p className="text-gray-600 text-sm mt-0.5">Task completion and overdue statistics</p>
         </div>
 
@@ -276,7 +156,7 @@ export default function Tab2Tasks() {
             </thead>
             <tbody className="divide-y divide-gray-200">
               {metrics.map(metric => (
-                <tr key={metric.owner} className="hover:bg-gray-50 transition-colors">
+                <tr key={metric.ownerId} className="hover:bg-gray-50 transition-colors">
                   <td className="px-6 py-4 text-sm font-medium text-gray-900">
                     {metric.owner}
                   </td>
@@ -298,7 +178,7 @@ export default function Tab2Tasks() {
               {metrics.length === 0 && !isLoading && (
                 <tr>
                   <td colSpan={5} className="px-6 py-8 text-center text-gray-500">
-                    No tasks found matching the selected filter
+                    No tasks found
                   </td>
                 </tr>
               )}
@@ -306,19 +186,6 @@ export default function Tab2Tasks() {
           </table>
         </div>
       </div>
-
-      {/* Load More Button */}
-      {hasMoreTasks && !isLoading && (
-        <div className="text-center">
-          <button
-            onClick={handleLoadMore}
-            disabled={nextBatchRef.current.length === 0}
-            className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg transition-colors font-medium shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {nextBatchRef.current.length === 0 ? 'Loading more tasks...' : `Load More (${nextBatchRef.current.length} ready)`}
-          </button>
-        </div>
-      )}
     </div>
   );
 }

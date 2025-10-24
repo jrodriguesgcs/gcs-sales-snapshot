@@ -1,7 +1,7 @@
 export interface Task {
   id: string;
   title: string;
-  status: string | number; // ✅ Changed to accept both string and number
+  status: string | number;
   duedate: string | null;
   assignee: string;
   cdate: string;
@@ -16,6 +16,7 @@ export interface User {
 
 export interface TaskMetrics {
   owner: string;
+  ownerId: string;
   total: number;
   completed: number;
   overdue: number;
