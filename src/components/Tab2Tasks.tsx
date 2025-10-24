@@ -21,6 +21,7 @@ export default function Tab2Tasks() {
   const [dateFilter, setDateFilter] = useState<DateFilter>('last7days');
   const [error, setError] = useState<string | null>(null);
   const [hasMoreTasks, setHasMoreTasks] = useState(true);
+  const [currentOffset, setCurrentOffset] = useState(0); // ✅ Track offset for pagination
   const backgroundLoadingRef = useRef<boolean>(false);
   const nextBatchRef = useRef<Task[]>([]);
 
@@ -33,6 +34,7 @@ export default function Tab2Tasks() {
     setError(null);
     setTasks([]);
     setHasMoreTasks(true);
+    setCurrentOffset(0); // ✅ Reset offset
     nextBatchRef.current = [];
 
     try {
@@ -49,10 +51,11 @@ export default function Tab2Tasks() {
 
       // Load first 1000 tasks
       console.log('🔵 Starting to load tasks...');
-      const initialTasks = await fetchTasks(dateFilter, setLoadingProgress, 1000);
+      const initialTasks = await fetchTasks(dateFilter, setLoadingProgress, 1000, 0);
       console.log('✅ Tasks loaded:', initialTasks.length);
       console.log('📋 First task sample:', initialTasks[0]);
       setTasks(initialTasks);
+      setCurrentOffset(1000); // ✅ Set offset for next batch
 
       if (initialTasks.length < 1000) {
         setHasMoreTasks(false);
@@ -65,7 +68,7 @@ export default function Tab2Tasks() {
         });
       } else {
         // Start background loading next batch
-        startBackgroundLoading();
+        startBackgroundLoading(1000); // ✅ Pass current offset
       }
     } catch (err) {
       console.error('❌ Error loading data:', err);
@@ -76,20 +79,23 @@ export default function Tab2Tasks() {
     }
   };
 
-  const startBackgroundLoading = async () => {
+  const startBackgroundLoading = async (offset: number) => { // ✅ Accept offset parameter
     if (backgroundLoadingRef.current) return;
     backgroundLoadingRef.current = true;
 
     try {
+      console.log(`🔄 Background loading next batch from offset ${offset}...`);
       const nextBatch = await fetchTasks(
         dateFilter,
         (progress) => {
           // Silent background loading
           console.log('Background loading:', progress);
         },
-        1000
+        1000,
+        offset // ✅ Use passed offset
       );
 
+      console.log(`✅ Background batch loaded: ${nextBatch.length} tasks`);
       nextBatchRef.current = nextBatch;
 
       if (nextBatch.length < 1000) {
@@ -97,6 +103,7 @@ export default function Tab2Tasks() {
       }
     } catch (error) {
       console.error('Background loading error:', error);
+      setHasMoreTasks(false); // ✅ Stop trying if error
     } finally {
       backgroundLoadingRef.current = false;
     }
@@ -104,14 +111,18 @@ export default function Tab2Tasks() {
 
   const handleLoadMore = () => {
     if (nextBatchRef.current.length > 0) {
+      const loadedCount = nextBatchRef.current.length;
       setTasks(prev => [...prev, ...nextBatchRef.current]);
       
-      const loadedCount = nextBatchRef.current.length;
+      const newOffset = currentOffset + loadedCount;
+      setCurrentOffset(newOffset); // ✅ Update offset
+      
+      console.log(`📥 Loaded ${loadedCount} more tasks. New offset: ${newOffset}`);
       nextBatchRef.current = [];
 
       if (loadedCount >= 1000) {
         // Start loading next batch in background
-        startBackgroundLoading();
+        startBackgroundLoading(newOffset); // ✅ Pass new offset
       } else {
         setHasMoreTasks(false);
         setLoadingProgress({
@@ -130,7 +141,7 @@ export default function Tab2Tasks() {
     const metricsMap = new Map<string, TaskMetrics>();
 
     tasks.forEach(task => {
-      const userId = task.assignee; // ✅ Changed from assignee_userid
+      const userId = task.assignee;
       const userName = userMap.get(userId) || `User ${userId}`;
 
       // Exclude operator (ID 16)
@@ -151,7 +162,12 @@ export default function Tab2Tasks() {
       const metric = metricsMap.get(userName)!;
       metric.total++;
 
-      if (task.status === 1) {
+      // ✅ FIX: status is a string, not a number!
+      const isCompleted = task.status === 1 || task.status === '1';
+      
+      console.log(`Task ${task.id}: status="${task.status}" (type: ${typeof task.status}), isCompleted=${isCompleted}`);
+
+      if (isCompleted) {
         metric.completed++;
       } else {
         // Incomplete
@@ -162,6 +178,8 @@ export default function Tab2Tasks() {
         }
       }
     });
+
+    console.log('📊 Final metrics:', Array.from(metricsMap.entries()));
 
     return Array.from(metricsMap.values()).sort((a, b) =>
       a.owner.localeCompare(b.owner)

@@ -142,7 +142,8 @@ export async function fetchUsers(
 export async function fetchTasks(
   dateFilter: 'last7days' | 'last30days' | 'alltime',
   onProgress: (progress: LoadingProgress) => void,
-  maxTasks: number = 1000
+  maxTasks: number = 1000,
+  startOffset: number = 0 // ✅ Added to support pagination
 ): Promise<Task[]> {
   const tasks: Task[] = [];
   
@@ -175,7 +176,7 @@ export async function fetchTasks(
     const endBatch = Math.min(startBatch + batchesPerWorker, totalBatches);
 
     for (let batchIndex = startBatch; batchIndex < endBatch; batchIndex++) {
-      const offset = batchIndex * limit;
+      const offset = startOffset + (batchIndex * limit); // ✅ Use startOffset
       
       try {
         const endpoint = `/api/3/dealTasks?limit=${limit}&offset=${offset}${dateParams}&orders[cdate]=DESC`;
@@ -212,6 +213,11 @@ export async function fetchTasks(
 
   // Sort by creation date (newest first)
   tasks.sort((a, b) => new Date(b.cdate).getTime() - new Date(a.cdate).getTime());
+
+  // ✅ Log date range for debugging
+  if (tasks.length > 0) {
+    console.log(`📅 Task date range: ${tasks[0].cdate} (newest) to ${tasks[tasks.length - 1].cdate} (oldest)`);
+  }
 
   onProgress({
     phase: 'tasks',
