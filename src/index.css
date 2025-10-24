@@ -1,0 +1,57 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 240 79% 8%;
+    --primary: 213 100% 63%;
+    --border: 222 13% 91%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  
+  body {
+    @apply bg-background text-foreground;
+    font-family: ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    font-size: 14px;
+    font-weight: 400;
+    line-height: 20px;
+  }
+
+  h1 {
+    font-size: 30px;
+    font-weight: 700;
+    line-height: 36px;
+  }
+
+  h2 {
+    font-size: 24px;
+    font-weight: 700;
+    line-height: 32px;
+  }
+
+  h3 {
+    font-size: 16px;
+    font-weight: 500;
+    line-height: 24px;
+  }
+
+  h4 {
+    font-size: 14px;
+    font-weight: 500;
+    line-height: 20px;
+  }
+}
+
+#root {
+  width: 100%;
+  min-height: 100vh;
+}
