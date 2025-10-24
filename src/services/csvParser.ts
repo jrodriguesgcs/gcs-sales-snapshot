@@ -25,7 +25,7 @@ export async function loadDealsCSV(): Promise<Deal[]> {
           
           resolve(results.data as Deal[]);
         },
-        error: (error) => {
+        error: (error: Error) => {
           reject(new Error(`CSV parsing error: ${error.message}`));
         },
       });

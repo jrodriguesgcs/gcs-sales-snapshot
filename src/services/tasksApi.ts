@@ -1,8 +1,5 @@
 import { Task, User, LoadingProgress } from '../types/tasks';
 
-const API_BASE = import.meta.env.VITE_AC_API_URL || '';
-const API_TOKEN = import.meta.env.VITE_AC_API_TOKEN || '';
-
 class RateLimiter {
   private queue: Array<() => void> = [];
   private activeRequests = 0;
