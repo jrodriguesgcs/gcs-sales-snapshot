@@ -113,6 +113,13 @@ async function calculateMetrics(apiUrl, apiToken) {
   
   console.log('🔵 Starting metrics calculation...');
   
+  // Calculate date 12 months ago
+  const twelveMonthsAgo = new Date();
+  twelveMonthsAgo.setMonth(twelveMonthsAgo.getMonth() - 12);
+  const dateFilter = twelveMonthsAgo.toISOString().split('T')[0]; // YYYY-MM-DD format
+  
+  console.log(`📅 Filtering deals created after: ${dateFilter}`);
+  
   // Step 1: Load users
   console.log('📥 Loading users...');
   const userMap = new Map();
@@ -147,8 +154,8 @@ async function calculateMetrics(apiUrl, apiToken) {
 
   console.log(`✅ Users loaded: ${userMap.size}`);
 
-  // Step 2: Load all deals for all owners in parallel
-  console.log('📥 Loading deals...');
+  // Step 2: Load all deals for all owners in parallel (with date filter)
+  console.log('📥 Loading deals (last 12 months)...');
   const allDeals = [];
 
   const dealsByOwner = await Promise.all(
@@ -160,7 +167,8 @@ async function calculateMetrics(apiUrl, apiToken) {
 
       while (hasMore) {
         try {
-          const endpoint = `/api/3/deals?filters[owner]=${ownerId}&limit=${limit}&offset=${offset}`;
+          // Add date filter for deals created in last 12 months
+          const endpoint = `/api/3/deals?filters[owner]=${ownerId}&filters[created_after]=${dateFilter}&limit=${limit}&offset=${offset}`;
           const data = await rateLimiter.throttle(() => fetchFromAPI(apiUrl, apiToken, endpoint));
 
           if (data.deals && data.deals.length > 0) {
@@ -176,12 +184,13 @@ async function calculateMetrics(apiUrl, apiToken) {
         }
       }
 
+      console.log(`✅ Owner ${ownerId}: ${ownerDeals.length} deals`);
       return ownerDeals;
     })
   );
 
   dealsByOwner.forEach(deals => allDeals.push(...deals));
-  console.log(`✅ Deals loaded: ${allDeals.length}`);
+  console.log(`✅ Total deals loaded: ${allDeals.length}`);
 
   // Step 3: Load tasks for all deals in parallel
   console.log('📥 Loading tasks...');
@@ -209,6 +218,11 @@ async function calculateMetrics(apiUrl, apiToken) {
             dealId: deal.id,
           }));
           workerTasks.push(...tasks);
+        }
+
+        // Log progress every 100 deals
+        if ((i + 1) % 100 === 0) {
+          console.log(`📊 Tasks progress: ${i + 1}/${allDeals.length} deals processed`);
         }
       } catch (error) {
         console.error(`Error loading tasks for deal ${deal.id}:`, error);
