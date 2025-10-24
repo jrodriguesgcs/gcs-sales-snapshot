@@ -1,5 +1,3 @@
-import { LoadingProgress } from '../src/types/tasks';
-
 class RateLimiter {
   private queue: Array<() => void> = [];
   private activeRequests = 0;
@@ -100,7 +98,8 @@ async function fetchFromAPI(url: string, token: string, endpoint: string): Promi
   });
 
   if (!response.ok) {
-    throw new Error(`API Error: ${response.status} ${response.statusText}`);
+    const errorText = await response.text();
+    throw new Error(`API Error: ${response.status} ${response.statusText} - ${errorText}`);
   }
 
   return await response.json();
@@ -305,7 +304,7 @@ async function calculateMetrics(apiUrl: string, apiToken: string): Promise<TaskM
   return metrics;
 }
 
-const handler = async (req: any, res: any) => {
+export default async function handler(req: any, res: any) {
   // CORS headers
   res.setHeader('Access-Control-Allow-Credentials', 'true');
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -320,6 +319,7 @@ const handler = async (req: any, res: any) => {
   const AC_API_TOKEN = process.env.AC_API_TOKEN;
 
   if (!AC_API_URL || !AC_API_TOKEN) {
+    console.error('❌ Missing environment variables');
     return res.status(500).json({ error: 'API configuration missing' });
   }
 
@@ -351,12 +351,10 @@ const handler = async (req: any, res: any) => {
       calculatedAt: new Date(now).toISOString(),
     });
   } catch (error) {
-    console.error('Task metrics calculation error:', error);
+    console.error('❌ Task metrics calculation error:', error);
     return res.status(500).json({ 
       error: 'Failed to calculate task metrics',
       details: error instanceof Error ? error.message : 'Unknown error'
     });
   }
-};
-
-module.exports = handler;
+}
